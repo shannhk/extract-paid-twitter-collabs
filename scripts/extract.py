@@ -12,8 +12,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import json
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -142,10 +144,46 @@ def write_csv(rows: list[dict], path: Path) -> None:
         writer.writerows(rows)
 
 
+_TWEET_URL_RE = re.compile(r"(?:x|twitter)\.com/([^/]+)/status/(\d+)")
+
+
+def _parse_tweet_url(url: str) -> tuple[str, str]:
+    m = _TWEET_URL_RE.search(url)
+    if not m:
+        return "", ""
+    return m.group(1), m.group(2)  # (source_handle, tweet_id)
+
+
+def write_json(rows: list[dict], path: Path, tweet_url: str) -> None:
+    source_handle, tweet_id = _parse_tweet_url(tweet_url)
+    payload = {
+        "tweet_url": tweet_url,
+        "source_handle": source_handle,
+        "tweet_id": tweet_id,
+        "scanned_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "count": len(rows),
+        "creators": rows,
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _infer_format(path: Path, explicit: str | None) -> str:
+    if explicit and explicit != "auto":
+        return explicit
+    suffix = path.suffix.lower().lstrip(".")
+    return suffix if suffix in ("csv", "json") else "csv"
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Extract paid creators from paid.airaa.xyz")
     parser.add_argument("tweet_url", help="X/Twitter post URL")
-    parser.add_argument("--out", default="airaa_results.csv", help="Output CSV path")
+    parser.add_argument("--out", default="airaa_results.csv", help="Output path (.csv or .json)")
+    parser.add_argument(
+        "--format",
+        choices=["auto", "csv", "json"],
+        default="auto",
+        help="Output format. Default: auto (infer from --out extension, fallback to csv)",
+    )
     parser.add_argument("--show-browser", action="store_true", help="Run Chromium in headed mode")
     args = parser.parse_args()
 
@@ -153,9 +191,12 @@ async def main() -> int:
     html = await fetch_results(args.tweet_url, headless=not args.show_browser)
     rows = parse_results(html)
     out = Path(args.out)
-    write_csv(rows, out)
-    print(f"\nWrote {len(rows)} creators → {out.resolve()}", file=sys.stderr)
-    # Also print a tiny preview on stdout
+    fmt = _infer_format(out, args.format)
+    if fmt == "json":
+        write_json(rows, out, args.tweet_url)
+    else:
+        write_csv(rows, out)
+    print(f"\nWrote {len(rows)} creators ({fmt.upper()}) → {out.resolve()}", file=sys.stderr)
     for r in rows[:5]:
         print(f"{r['handle']:20}  {r['followers']:>6}  {r['tier']:5}  likes={r['likes']:>4}  rts={r['rts']:>3}  views={r['views']:>6}")
     if len(rows) > 5:
