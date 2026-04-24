@@ -15,6 +15,8 @@ import csv
 import json
 import re
 import sys
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,11 +49,15 @@ def parse_results(html: str) -> list[dict]:
         handle = handle_link.get_text(strip=True)
         profile_url = handle_link["href"]
 
-        # Name — easiest grab is the img[alt] on the avatar in the same row
+        # Name + avatar — the row's <img> element carries both
         name = ""
+        avatar_url = ""
         avatar = tr.select_one("img[alt]")
-        if avatar and avatar.get("alt"):
-            name = avatar["alt"].strip()
+        if avatar:
+            name = (avatar.get("alt") or "").strip()
+            avatar_url = (avatar.get("src") or "").strip()
+            # Twitter serves a "_normal" (48x48) avatar — bump to "_bigger" (73x73) for crispness
+            avatar_url = avatar_url.replace("_normal.", "_bigger.")
 
         followers_cell = tds[1]
         followers = ""
@@ -81,6 +87,7 @@ def parse_results(html: str) -> list[dict]:
         rows.append({
             "handle": handle,
             "name": name,
+            "avatar_url": avatar_url,
             "followers": followers,
             "tier": tier,
             "likes": likes,
@@ -154,11 +161,31 @@ def _parse_tweet_url(url: str) -> tuple[str, str]:
     return m.group(1), m.group(2)  # (source_handle, tweet_id)
 
 
+def _fetch_source_display_name(tweet_url: str) -> str:
+    """Ask X's public oEmbed endpoint for the source tweet author's display name.
+
+    Works without auth. Fails silently and returns "" if the endpoint refuses.
+    """
+    oembed = (
+        "https://publish.twitter.com/oembed?omit_script=1&url="
+        + urllib.parse.quote(tweet_url, safe="")
+    )
+    try:
+        with urllib.request.urlopen(oembed, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+            return (data.get("author_name") or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  (oembed lookup failed: {exc})", file=sys.stderr)
+        return ""
+
+
 def write_json(rows: list[dict], path: Path, tweet_url: str) -> None:
     source_handle, tweet_id = _parse_tweet_url(tweet_url)
+    source_name = _fetch_source_display_name(tweet_url) if source_handle else ""
     payload = {
         "tweet_url": tweet_url,
         "source_handle": source_handle,
+        "source_name": source_name,
         "tweet_id": tweet_id,
         "scanned_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "count": len(rows),
