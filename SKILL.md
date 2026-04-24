@@ -67,6 +67,7 @@ Columns produced in the CSV:
 |---|---|---|
 | `handle` | `@historyinmemes` | X handle with `@` prefix |
 | `name` | `Historic Vids` | Display name pulled from avatar `alt` |
+| `avatar_url` | `https://pbs.twimg.com/profile_images/.../X_bigger.jpg` | Creator's profile picture (JSON only) |
 | `followers` | `6.2M` | Raw string as rendered (K/M suffix) |
 | `tier` | `Mega` | Nano / Mid / Macro / Mega |
 | `likes` | `45` | On the creator's quote-tweet |
@@ -75,6 +76,8 @@ Columns produced in the CSV:
 | `snippet` | `In the Medieval Era...` | First line of the QT text |
 | `qt_url` | `https://x.com/.../status/...` | That creator's QT |
 | `profile_url` | `https://x.com/historyinmemes` | Creator's X profile |
+
+JSON files also include top-level metadata: `tweet_url`, `source_handle`, `source_name` (the advertiser's display name, fetched via X oEmbed — e.g. `"Higgsfield AI"` for `@higgsfield`), `tweet_id`, `scanned_at`, `count`.
 
 ## Edge cases
 
