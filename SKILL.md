@@ -37,15 +37,22 @@ No LLM calls, no API keys — pure deterministic Playwright + BeautifulSoup.
 
    This takes ~30–60s the first time (downloads Chromium). Subsequent runs skip it.
 
-3. **Run the extractor.** Default output is `airaa_results.csv` in the user's current
-   working directory. If the tweet URL contains a status ID, prefer
-   `airaa_<status_id>.csv` for clarity.
+3. **Run the extractor.** Default output is `airaa_results.csv`. If the tweet URL
+   contains a status ID, prefer `<handle>_<status_id>.csv` for clarity.
 
    ```bash
    source ~/.claude/skills/paid-collab-extractor/.venv/bin/activate && \
      python ~/.claude/skills/paid-collab-extractor/scripts/extract.py \
        "<TWEET_URL>" --out "<OUTPUT_PATH>"
    ```
+
+   **Output format:** auto-detected from the `--out` extension.
+   - `.csv` (default) → flat CSV
+   - `.json` → structured JSON with `tweet_url`, `source_handle`, `tweet_id`,
+     `scanned_at`, `count`, and `creators[]`. Use JSON when feeding data into a
+     downstream app (e.g. the paid-collab dashboard's `/data` directory).
+
+   Force a format with `--format csv|json` if the extension is ambiguous.
 
 4. **Report results.** Show the user:
    - Total paid creators found
